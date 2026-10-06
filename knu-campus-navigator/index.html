@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="경북대학교 대구캠퍼스 샛길과 계단까지 반영한 도보 최단경로 안내">
+<title>KNU Campus Navigator</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <div class="brand"><b>KNU <span>Campus</span> Navigator</b><small>경북대 도보 길찾기</small></div>
+    <div id="top">
+      <div id="searchCard">
+        <div class="field" data-role="start"><i class="s"></i><input id="inStart" placeholder="출발지 검색" autocomplete="off" enterkeyhint="search" aria-label="출발지"><button class="x" data-clear="start" aria-label="출발지 지우기"></button></div>
+        <div class="field" data-role="end"><i class="e"></i><input id="inEnd" placeholder="도착지 검색 (건물명, 번호, 줄임말)" autocomplete="off" enterkeyhint="search" aria-label="도착지"><button class="x" data-clear="end" aria-label="도착지 지우기"></button></div>
+        <button id="swap" aria-label="출발지와 도착지 바꾸기"></button>
+        <div id="suggest" hidden></div>
+      </div>
+      <div id="chips"></div>
+    </div>
+    <div id="sheet"><button class="handle" aria-label="안내창 접기 펼치기"></button><div id="sheetBody"></div></div>
+  </div>
+  <div id="mapWrap" data-z="lo">
+    <div id="map"></div>
+    <div id="banner" hidden></div>
+    <div id="toast" role="status"></div>
+    <div id="fabs"><button class="fab" id="btnLoc" aria-label="내 위치"></button><button class="fab" id="btnNet" aria-label="보행 네트워크 보기"></button></div>
+    <div id="legend">
+      <span><i style="border-color:#2f6fed"></i>직접 그린 캠퍼스 길</span>
+      <span><i style="border-color:#03c75a"></i>인도</span>
+      <span><i style="border-color:#8e97a6"></i>차도</span>
+      <span><i style="border-color:#8b5cf6;border-top-style:dashed"></i>계단</span>
+    </div>
+  </div>
+</div>
+<script src="src/core.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
