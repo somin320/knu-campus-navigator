@@ -89,7 +89,9 @@
     <button id="clipCampus" style="background:#b91c1c;color:#fff;border-color:#b91c1c;font-weight:700">캠퍼스 밖 삭제</button>
     <button id="vtxEdit">꼭짓점 편집 OFF</button>
     <span class="sep"></span>
-    <button id="saveFile">저장</button>
+    <button id="saveFile" style="background:#03c75a;color:#fff;border-color:#03c75a;font-weight:700">저장</button>
+    <button id="linkRepo">저장소 파일 연결</button>
+    <button id="reloadRepo">최신 데이터 불러오기</button>
     <button id="loadFile2">불러오기</button>
     <input type="file" id="loadFile" accept="application/json" hidden>
     <button id="doExport">내보내기</button>
@@ -233,7 +235,7 @@ map.on('click',e=>{
     selectNode(n);updateCounts();setStatus(`중간점 추가 (${id}). 길 잇기로 양옆을 이어 길을 따라가게 하세요.`);
   } else if(mode==='move'){clearSelOutline();sel=null;renderPanel();}
 });
-function uniqueId(){let i=1;while(byId('wp_'+i))i++;return 'wp_'+i;}
+function uniqueId(){let id;do{id='wp_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}while(byId(id));return id;}
 function tLabel(t){return t==='road'?'차도':t==='stairs'?'계단':'인도';}
 
 // ---- dijkstra ----
@@ -356,9 +358,9 @@ function wirePanel(){
   if(dt)dt.querySelectorAll('button').forEach(b=>b.onclick=()=>{draft.type=b.dataset.t;renderPanel();});
   const ds=document.getElementById('dshort');if(ds)ds.onchange=e=>draft.isShortcut=e.target.checked;
   const nn=document.getElementById('nName');
-  if(nn)nn.oninput=e=>{sel.ref.name=e.target.value;const mk=markers[sel.ref.id];if(mk)mk.setTooltipContent(labelText(sel.ref));};
+  if(nn)nn.oninput=e=>{markDirty();sel.ref.name=e.target.value;const mk=markers[sel.ref.id];if(mk)mk.setTooltipContent(labelText(sel.ref));};
   const np=document.getElementById('nPoi');
-  if(np)np.onchange=e=>{sel.ref.poi=e.target.value||undefined;const mk=markers[sel.ref.id];if(mk)mk.setTooltipContent(labelText(sel.ref));persist();};
+  if(np)np.onchange=e=>{markDirty();sel.ref.poi=e.target.value||undefined;const mk=markers[sel.ref.id];if(mk)mk.setTooltipContent(labelText(sel.ref));persist();};
   const nt=document.getElementById('nType');
   if(nt)nt.onchange=e=>{snapshot();sel.ref.type=e.target.value;
     markers[sel.ref.id].setIcon(icon(sel.ref.type));markClass(sel.ref,'sel',true);renderPanel();};
@@ -390,6 +392,7 @@ document.getElementById('doExport').onclick=()=>{if(!document.getElementById('ex
 
 // ---- undo / modes ----
 document.getElementById('undo').onclick=()=>{
+  if(history.length) markDirty();
   if(!history.length){setStatus('되돌릴 게 없어요.');return;}
   const s=JSON.parse(history.pop());nodes=s.nodes;edges=s.edges;
   sel=null;edgeFrom=null;clearRoute();routeFrom=null;
@@ -423,21 +426,92 @@ document.getElementById('lockBtn').onclick=()=>{ locked=!locked; applyDrag();
   document.getElementById('lockBtn').textContent=locked?'🔒 잠금':'🔓 이동가능';
   setStatus(locked?'점이 잠겼어요 — 끌어도 안 움직여요 (이름·연결 편집은 가능).':'잠금 해제 — ‘위치 수정’ 모드에서 점을 끌 수 있어요.'); };
 
-function persist(){ try{ localStorage.setItem('knuGraphV3', JSON.stringify({nodes,edges})); }catch(e){} }
+// ---- saving: dirty tracking, direct save to the repo file, conflict guard ----
+let dirty=false, baseHash='', repoHandle=null;
+const _snapshot=snapshot;
+snapshot=function(){ _snapshot(); markDirty(); };
+function markDirty(){ if(!dirty){ dirty=true; updateSaveBtn(); } }
+function updateSaveBtn(){ const b=document.getElementById('saveFile'); if(b) b.textContent=dirty?'저장 (저장 안 한 변경 있음)':'저장'; }
+function hashText(t){ let h=2166136261; for(let i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0).toString(16)+':'+t.length; }
+function formatGraph(){
+  const ns=[...nodes].sort((a,b)=>String(a.id)<String(b.id)?-1:String(a.id)>String(b.id)?1:0);
+  const k=e=>String(e.from)+'|'+String(e.to);
+  const es=[...edges].sort((a,b)=>k(a)<k(b)?-1:k(a)>k(b)?1:0);
+  return '{"nodes":[\n'+ns.map(n=>JSON.stringify(n)).join(',\n')+'\n],\n"edges":[\n'+es.map(e=>JSON.stringify(e)).join(',\n')+'\n]}\n';
+}
+function persist(){ if(!dirty) return; try{ localStorage.setItem('knuGraphV3', JSON.stringify({nodes,edges,dirty:true,baseHash})); }catch(e){} }
+function clearLocal(){ try{ localStorage.removeItem('knuGraphV3'); }catch(e){} }
 setInterval(persist, 4000);
-window.addEventListener('beforeunload', persist);
+window.addEventListener('beforeunload', e=>{ persist(); if(dirty){ e.preventDefault(); e.returnValue=''; } });
+
+function applyData(d, text, msg){
+  nodes=d.nodes; edges=d.edges; sel=null; edgeFrom=null; clearRoute(); routeFrom=null; history.length=0;
+  baseHash=text!=null?hashText(text):''; dirty=false; updateSaveBtn(); clearLocal();
+  reindex(); rebuildMarkers(); applyDrag(); drawEdges(); updateCounts(); renderPanel();
+  if(msg) setStatus(msg);
+}
+// remember the linked file across reloads (Chrome keeps file handles in IndexedDB)
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('knu-editor',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbSet(k,v){ try{ const db=await idb(); await new Promise(r=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=r; t.onerror=r; }); }catch(e){} }
+async function idbGet(k){ try{ const db=await idb(); return await new Promise(r=>{ const q=db.transaction('kv').objectStore('kv').get(k); q.onsuccess=()=>r(q.result); q.onerror=()=>r(null); }); }catch(e){ return null; } }
+async function ensurePerm(h){ const o={mode:'readwrite'}; if((await h.queryPermission(o))==='granted') return true; return (await h.requestPermission(o))==='granted'; }
+const canLink = 'showOpenFilePicker' in window;
+
+async function linkRepo(){
+  if(!canLink){ setStatus('이 브라우저는 파일에 바로 저장할 수 없어요. 크롬이나 엣지로 열어 주세요.'); return null; }
+  try{
+    const [h]=await window.showOpenFilePicker({types:[{description:'knu-graph.json',accept:{'application/json':['.json']}}],multiple:false});
+    if(h.name!=='knu-graph.json' && !confirm(h.name+' 파일을 골랐어요. 저장소의 knu-graph.json이 맞나요?')) return null;
+    if(!(await ensurePerm(h))){ setStatus('파일 쓰기 권한이 없어서 연결하지 못했어요.'); return null; }
+    repoHandle=h; await idbSet('repoHandle',h);
+    const text=await (await h.getFile()).text();
+    if(!dirty){ applyData(JSON.parse(text), text, '저장소 파일을 연결하고 그 내용을 불러왔어요. 이제 저장을 누르면 이 파일에 바로 덮어써요.'); }
+    else { setStatus('저장소 파일을 연결했어요. 지금 편집 중인 내용은 그대로 두었어요. 저장을 누르면 이 파일에 바로 덮어써요.'); }
+    return h;
+  }catch(e){ if(e.name!=='AbortError') setStatus('연결 실패: '+e.message); return null; }
+}
+document.getElementById('linkRepo').onclick=linkRepo;
+
+document.getElementById('saveFile').onclick=async()=>{
+  const text=formatGraph();
+  if(!repoHandle && canLink){
+    if(!confirm('저장소 폴더의 knu-graph.json 파일을 한 번만 골라 주세요. 그다음부터는 저장을 누르면 그 파일에 바로 덮어써요.')) return;
+    if(!(await linkRepo())) return;
+  }
+  if(!repoHandle){ download('knu-graph.json', text); baseHash=hashText(text); dirty=false; updateSaveBtn(); clearLocal(); setStatus('knu-graph.json을 내려받았어요. 저장소 폴더의 같은 파일에 덮어쓰세요.'); return; }
+  try{
+    if(!(await ensurePerm(repoHandle))){ setStatus('파일 쓰기 권한이 없어서 저장하지 못했어요.'); return; }
+    const onDisk=await (await repoHandle.getFile()).text();
+    if(baseHash && hashText(onDisk)!==baseHash){
+      const go=confirm('편집을 시작한 뒤에 저장소 파일이 바뀌었어요. 다른 팀원의 작업을 Pull 받았을 수 있어요.\n\n그대로 저장하면 그 작업을 덮어써요. 덮어쓸까요?\n(취소하고 팀원과 먼저 확인하는 걸 권해요)');
+      if(!go){ setStatus('저장하지 않았어요. 팀원과 확인한 뒤 최신 데이터 불러오기로 다시 시작하세요.'); return; }
+    }
+    const w=await repoHandle.createWritable(); await w.write(text); await w.close();
+    baseHash=hashText(text); dirty=false; updateSaveBtn(); clearLocal();
+    const t=new Date(); setStatus(`저장소의 knu-graph.json에 저장했어요 (${t.getHours()}시 ${String(t.getMinutes()).padStart(2,'0')}분). 앱을 새로고침해 확인하고 Commit, Push 하세요.`);
+  }catch(e){ setStatus('저장 실패: '+e.message+'. 저장소 파일 연결을 다시 눌러 주세요.'); }
+};
+
+async function loadLatest(){
+  if(dirty && !confirm('저장 안 한 변경이 있어요. 버리고 최신 데이터를 불러올까요?')) return;
+  try{
+    let text=null;
+    if(repoHandle && await ensurePerm(repoHandle)) text=await (await repoHandle.getFile()).text();
+    else { const r=await fetch('../knu-graph.json',{cache:'no-store'}); if(r.ok) text=await r.text(); }
+    if(text==null) throw new Error('파일을 찾지 못했어요');
+    applyData(JSON.parse(text), text, '저장소의 최신 데이터를 불러왔어요.');
+  }catch(e){ setStatus('불러오기 실패: '+e.message); }
+}
+document.getElementById('reloadRepo').onclick=loadLatest;
 
 function download(name,text){ const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([text],{type:'application/json'})); a.download=name; a.click(); }
-document.getElementById('saveFile').onclick=async()=>{ const j=JSON.stringify({nodes,edges});
-  download('knu-graph.json', j); try{await navigator.clipboard.writeText(j);}catch(e){}
-  setStatus('저장 완료 — 파일 다운로드 + 클립보드 복사. 다음엔 ‘불러오기’로 복원하세요.'); };
 document.getElementById('loadFile2').onclick=()=>document.getElementById('loadFile').click();
 document.getElementById('loadFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return;
   const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result);
-    nodes=d.nodes; edges=d.edges; sel=null; edgeFrom=null; clearRoute(); routeFrom=null;
-    rebuildMarkers(); applyDrag(); drawEdges(); updateCounts(); renderPanel(); persist();
-    setStatus('저장 파일을 불러왔어요.'); }catch(err){ setStatus('파일 읽기 실패: '+err.message); } };
+    snapshot(); nodes=d.nodes; edges=d.edges; sel=null; edgeFrom=null; clearRoute(); routeFrom=null;
+    reindex(); rebuildMarkers(); applyDrag(); drawEdges(); updateCounts(); renderPanel(); markDirty(); persist();
+    setStatus('파일을 불러왔어요. 저장을 누르면 저장소 파일에 반영돼요.'); }catch(err){ setStatus('파일 읽기 실패: '+err.message); } };
   r.readAsText(f); };
 
 document.getElementById('clearEdges').onclick=()=>{ snapshot(); edges=[]; drawEdges(); updateCounts(); persist(); setStatus('모든 선을 삭제했어요.'); };
@@ -618,15 +692,27 @@ async function autoBuild(){
 
 // ---- init ----
 (async function initData(){
-  let from='편집기에 들어 있는 데이터를';
-  try{ const s=localStorage.getItem('knuGraphV3'); if(s){ const d=JSON.parse(s);
-    if(d&&Array.isArray(d.nodes)&&d.nodes.length){ nodes=d.nodes; edges=d.edges; from='이 브라우저에 자동 저장된 작업을'; } } }catch(e){}
-  if(from.startsWith('편집기') && location.protocol.startsWith('http')){
-    try{ const r=await fetch('../knu-graph.json',{cache:'no-cache'}); if(r.ok){ const d=await r.json(); nodes=d.nodes; edges=d.edges; from='저장소의 knu-graph.json을'; } }catch(e){}
+  let repoText=null, repoData=null;
+  if(location.protocol.startsWith('http')){
+    try{ const r=await fetch('../knu-graph.json',{cache:'no-store'}); if(r.ok){ repoText=await r.text(); repoData=JSON.parse(repoText); } }catch(e){}
   }
-  reindex();
+  try{ const h=await idbGet('repoHandle'); if(h) repoHandle=h; }catch(e){}
+  let local=null;
+  try{ const s=localStorage.getItem('knuGraphV3'); if(s){ const d=JSON.parse(s); if(d&&Array.isArray(d.nodes)&&d.nodes.length&&d.dirty!==false) local=d; } }catch(e){}
+  let msg;
+  if(local && repoText && local.baseHash===hashText(repoText)){
+    nodes=local.nodes; edges=local.edges; baseHash=local.baseHash; dirty=true;
+    msg='저장하지 않았던 작업을 이어서 불러왔어요.';
+  } else if(local && (!repoText || confirm('저장하지 않은 작업이 남아 있어요. 그런데 그 사이 저장소 파일이 바뀌었어요(팀원 작업일 수 있어요).\n\n남은 작업을 불러올까요? 취소하면 저장소의 최신 데이터로 시작해요.'))){
+    nodes=local.nodes; edges=local.edges; baseHash=local.baseHash||''; dirty=true;
+    msg='저장하지 않았던 작업을 불러왔어요. 저장할 때 팀원 작업을 덮어쓰지 않는지 확인하세요.';
+  } else if(repoData){
+    nodes=repoData.nodes; edges=repoData.edges; baseHash=hashText(repoText); dirty=false; clearLocal();
+    msg='저장소의 최신 knu-graph.json을 불러왔어요.';
+  } else { msg='편집기에 들어 있는 데이터를 불러왔어요. 서버를 켜고 localhost 주소로 열어야 저장소 파일을 읽어요.'; }
+  reindex(); updateSaveBtn();
   nodes.filter(n=>!String(n.id).startsWith('osm_')).forEach(addMarker); applyDrag(); drawEdges(); updateCounts(); renderPanel();
-  setStatus(from+' 불러왔어요. 다 고치면 저장을 눌러 knu-graph.json을 저장소 폴더에 덮어쓰세요.');
+  setStatus(msg+(repoHandle?' 저장을 누르면 연결된 저장소 파일에 바로 저장돼요.':' 처음 저장할 때 저장소의 knu-graph.json을 한 번 골라 주세요.'));
 })();
 </script>
 </body>
