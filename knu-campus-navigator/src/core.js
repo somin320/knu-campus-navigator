@@ -297,13 +297,31 @@
   }
 
   /* ---------- routing ---------- */
+  
+  const TERRAIN_WEIGHTS = Object.freeze({
+    stairs: 1.65,
+    slope: 1.10,
+    road: 1.00
+  });
+
+  const AVOID_WEIGHTS = Object.freeze({
+    stairs: 25,
+    slope: 2.5
+  });
+
   function edgeCost(e, avoid) {
     let w = e.m;
-    if (e.t === 'stairs') w *= avoid ? 25 : 1.5;
-    else if (e.t === 'slope') w *= avoid ? 2.5 : 1.15;
-    else if (e.t === 'road') w *= 1.06;
+
+    if (e.t === 'stairs')
+      w *= avoid ? AVOID_WEIGHTS.stairs : TERRAIN_WEIGHTS.stairs;
+    else if (e.t === 'slope')
+      w *= avoid ? AVOID_WEIGHTS.slope : TERRAIN_WEIGHTS.slope;
+    else if (e.t === 'road')
+      w *= TERRAIN_WEIGHTS.road;
+
     return w;
   }
+
 
   function dijkstra(G, sources, avoid, targets) {
     const n = G.N.length;
@@ -329,9 +347,18 @@
     return { dist, pn, pe, hit };
   }
 
+  
   function minutesFor(meters, stairsM, slopeM) {
-    return Math.max(1, Math.round((meters + stairsM * 0.8 + slopeM * 0.25) / WALK_M_PER_MIN));
+    const adjustedM = meters
+      + stairsM * (TERRAIN_WEIGHTS.stairs - 1)
+      + slopeM * (TERRAIN_WEIGHTS.slope - 1);
+
+    return Math.max(
+      1,
+      Math.round(adjustedM / WALK_M_PER_MIN)
+    );
   }
+
 
   function route(G, from, to, avoid) {
     const tset = new Set(to.nodes);
