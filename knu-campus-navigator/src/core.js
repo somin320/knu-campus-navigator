@@ -348,15 +348,16 @@
   }
 
   
-  function minutesFor(meters, stairsM, slopeM) {
+  function walkingMinutes(meters, stairsM, slopeM) {
     const adjustedM = meters
       + stairsM * (TERRAIN_WEIGHTS.stairs - 1)
       + slopeM * (TERRAIN_WEIGHTS.slope - 1);
 
-    return Math.max(
-      1,
-      Math.round(adjustedM / WALK_M_PER_MIN)
-    );
+    return adjustedM / WALK_M_PER_MIN;
+  }
+
+  function minutesFor(meters, stairsM, slopeM) {
+    return Math.max(1, Math.round(walkingMinutes(meters, stairsM, slopeM)));
   }
 
 
@@ -424,7 +425,12 @@
       if (!(cat in p.cats) || pi === from.place) return;
       let best = Infinity;
       for (const i of p.entrances) if (r.dist[i] < best) best = r.dist[i];
-      if (best < Infinity) list.push({ place: pi, cost: best, minutes: Math.max(1, Math.round(best / WALK_M_PER_MIN)) });
+      if (best < Infinity) {
+        // Keep selection cost and ranking unchanged. Ask route() for the canonical
+        // path (including entrance tie-breaking), then use its physical ETA.
+        const selected = route(G, from, { nodes: p.entrances, place: pi }, avoid);
+        if (selected) list.push({ place: pi, cost: best, minutes: selected.same ? 1 : selected.minutes });
+      }
     });
     list.sort((a, b) => a.cost - b.cost);
     return list;
@@ -443,14 +449,92 @@
     return { node: best, meters: bd };
   }
 
+  /* ---------- consecutive-class transfer (no UI dependencies) ---------- */
+  // Team-review default; not a measured allowance or a change to route().minutes.
+  const TRANSFER_DEFAULTS = Object.freeze({ comfortableMarginMinutes: 5 });
+
+  function assessTransfer(G, from, to, breakMinutes, options) {
+    options = options == null ? {} : options;
+    const conditions = {
+      avoid: !!options.avoid,
+      comfortableMarginMinutes: options.comfortableMarginMinutes === undefined
+        ? TRANSFER_DEFAULTS.comfortableMarginMinutes : options.comfortableMarginMinutes,
+      indoorMinutes: options.indoorMinutes === undefined ? null : options.indoorMinutes,
+      breakMinutes: null, timeSource: 'minutes', rounding: 'ceil-total-before-assessment',
+      walkMetersPerMinute: WALK_M_PER_MIN, terrainWeights: TERRAIN_WEIGHTS,
+      selectionWeights: options.avoid ? AVOID_WEIGHTS : TERRAIN_WEIGHTS,
+      policyProvisional: true, indoorTimeKnown: false,
+    };
+    const result = {
+      ok: false, reason: null, status: null, canMakeIt: null,
+      estimatedWalkingMinutes: null, exactWalkingMinutes: null, routeMinutes: null,
+      requiredMinutes: null, remainingMinutes: null, message: '', conditions,
+    };
+    const fail = (reason, message) => Object.assign(result, { reason, message });
+    if (typeof options !== 'object' || Array.isArray(options) ||
+        (options.avoid !== undefined && typeof options.avoid !== 'boolean') ||
+        !Number.isFinite(conditions.comfortableMarginMinutes) || conditions.comfortableMarginMinutes < 0 ||
+        (conditions.indoorMinutes !== null && (!Number.isFinite(conditions.indoorMinutes) || conditions.indoorMinutes < 0)))
+      return fail('invalid-options', '여유 기준과 내부 이동시간은 0 이상의 유한한 분 단위 숫자여야 합니다.');
+
+    let gap = breakMinutes;
+    if (gap && typeof gap === 'object' && !Array.isArray(gap)) {
+      const parse = s => {
+        if (typeof s !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(s)) return null;
+        const [h, m] = s.split(':').map(Number); return h * 60 + m;
+      };
+      const end = parse(gap.endTime), start = parse(gap.startTime);
+      gap = end === null || start === null ? NaN : start - end;
+      conditions.timeSource = 'same-day-HH:mm';
+    }
+    if (!Number.isFinite(gap) || gap < 0)
+      return fail('invalid-break', '쉬는 시간은 0 이상의 유한한 숫자 또는 같은 날의 종료·시작 시각(HH:mm)이어야 합니다.');
+    conditions.breakMinutes = gap;
+    conditions.indoorTimeKnown = conditions.indoorMinutes !== null;
+    const building = value => {
+      let p;
+      if (typeof value === 'string' || typeof value === 'number') p = G.byKey.get(String(value));
+      else if (value && typeof value === 'object') p = value.key != null
+        ? G.byKey.get(String(value.key)) : Number.isInteger(value.place) ? G.places[value.place] : null;
+      return p && p.kind === 'building' ? p : null;
+    };
+    const a = building(from), b = building(to);
+    if (!a || !b) return fail('unknown-building', '번호가 있는 출발·도착 건물을 확인해 주세요.');
+    conditions.from = a.key; conditions.to = b.key;
+    const r = route(G, { nodes: a.entrances, place: a.idx }, { nodes: b.entrances, place: b.idx }, conditions.avoid);
+    if (!r) return fail('no-route', '두 건물 사이의 경로를 찾지 못해 이동 가능 여부를 계산할 수 없습니다.');
+    if (r.same && !conditions.indoorTimeKnown)
+      return fail('same-building-internal-time-unknown', '같은 건물이지만 강의실 간 내부 이동시간을 알 수 없어 판정을 보류합니다. 내부 이동시간을 입력해 주세요.');
+    const exact = r.same ? 0 : walkingMinutes(r.meters, r.stairsM, r.slopeM);
+    result.exactWalkingMinutes = exact;
+    result.estimatedWalkingMinutes = Math.ceil(exact);
+    result.routeMinutes = r.same ? null : r.minutes;
+    result.requiredMinutes = Math.ceil(exact + (conditions.indoorMinutes || 0));
+    result.remainingMinutes = gap - result.requiredMinutes;
+    result.status = result.remainingMinutes < 0 ? '어려움'
+      : result.remainingMinutes >= conditions.comfortableMarginMinutes ? '여유' : '빠듯';
+    result.ok = true; result.canMakeIt = result.remainingMinutes >= 0;
+    result.reason = conditions.indoorTimeKnown ? 'estimated' : 'outdoor-only';
+    result.message = `예상 필요시간 ${result.requiredMinutes}분, 남는 시간 ${result.remainingMinutes}분으로 ${result.status}입니다.`
+      + (conditions.indoorTimeKnown ? ' 입력한 내부 이동시간을 포함한 추정입니다.' : ' 건물 간 도보 기준의 잠정 판정이며 내부 이동·대기는 포함하지 않았습니다.');
+    return result;
+  }
+
   /* ---------- search ---------- */
   function search(G, q, limit) {
     const qn = norm(q);
     if (!qn) return [];
+    // Preserve text aliases and scoring. Numeric queries must match complete
+    // number/suffix tokens: 공12 != 공1, 농대2 != 농대, 공2a != 공2.
+    const numeric = qn.match(/\d+[a-z]?/g);
     const res = [];
     G.places.forEach((p, pi) => {
       let s = 0;
       for (const t of p.search) {
+        if (numeric) {
+          const tokens = t.match(/\d+[a-z]?/g);
+          if (!tokens || tokens.some(n => !numeric.includes(n))) continue;
+        }
         if (t === qn) s = Math.max(s, 100);
         else if (t.startsWith(qn)) s = Math.max(s, 80 - Math.min(20, t.length - qn.length));
         else if (t.includes(qn)) s = Math.max(s, 55);
@@ -536,7 +620,8 @@
     return { nodes, edges };
   }
 
-  const api = { build, route, nearestInCat, snap, search, catOfQuery, chains, toEditor, hav, CATS, FAC, WALK_M_PER_MIN, edgeClass };
+  const api = { build, route, nearestInCat, snap, search, catOfQuery, chains, toEditor, hav, CATS, FAC, WALK_M_PER_MIN, edgeClass,
+    edgeCost, walkingMinutes, TERRAIN_WEIGHTS, AVOID_WEIGHTS, assessTransfer, TRANSFER_DEFAULTS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KNUCore = api;
 })(typeof window !== 'undefined' ? window : this);
