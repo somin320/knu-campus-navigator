@@ -95,6 +95,26 @@ test('normal aliases survive and numeric overmatching is removed', () => {
   for (const p of ps) assert.ok(C.search(G, `${p.name} (${p.num})`).includes(p.idx), `${p.key}: name with building number`);
 });
 
+test('actual transfers use the same ETA as route and facility displays in both modes', () => {
+  for (const [from, to] of [['100', '416'], ['413', '414'], ['111', '103']]) {
+    const a = G.byKey.get(from), b = G.byKey.get(to);
+    if (!a || !b) continue;
+    for (const avoid of [false, true]) {
+      const route = C.route(G, ep(a), ep(b), avoid);
+      const transfer = C.assessTransfer(G, from, to, 10, { avoid });
+      assert.equal(transfer.estimatedWalkingMinutes, route.minutes);
+      assert.equal(transfer.requiredMinutes, route.minutes);
+      assert.equal(transfer.remainingMinutes, 10 - route.minutes);
+      if (isBaseline && from === '100') {
+        const facility = C.nearestInCat(G, ep(a), '프린터', avoid).find(x => x.place === b.idx);
+        assert.equal(transfer.estimatedWalkingMinutes, facility.minutes);
+        assert.equal(transfer.estimatedWalkingMinutes, 7); assert.equal(transfer.remainingMinutes, 3);
+        assert.equal(transfer.status, '빠듯');
+      }
+    }
+  }
+});
+
 test('actual multi-entrance grouping and optional avoidance remain usable', () => {
   if (isBaseline) {
     assert.equal(G.byKey.get('111').entrances.length, 3);

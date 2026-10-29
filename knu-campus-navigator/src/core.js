@@ -460,7 +460,7 @@
       comfortableMarginMinutes: options.comfortableMarginMinutes === undefined
         ? TRANSFER_DEFAULTS.comfortableMarginMinutes : options.comfortableMarginMinutes,
       indoorMinutes: options.indoorMinutes === undefined ? null : options.indoorMinutes,
-      breakMinutes: null, timeSource: 'minutes', rounding: 'ceil-total-before-assessment',
+      breakMinutes: null, timeSource: 'minutes', rounding: 'route-minutes',
       walkMetersPerMinute: WALK_M_PER_MIN, terrainWeights: TERRAIN_WEIGHTS,
       selectionWeights: options.avoid ? AVOID_WEIGHTS : TERRAIN_WEIGHTS,
       policyProvisional: true, indoorTimeKnown: false,
@@ -507,9 +507,11 @@
       return fail('same-building-internal-time-unknown', '같은 건물이지만 강의실 간 내부 이동시간을 알 수 없어 판정을 보류합니다. 내부 이동시간을 입력해 주세요.');
     const exact = r.same ? 0 : walkingMinutes(r.meters, r.stairsM, r.slopeM);
     result.exactWalkingMinutes = exact;
-    result.estimatedWalkingMinutes = Math.ceil(exact);
+    // Reuse the displayed route ETA, including its rounding and one-minute minimum.
+    result.estimatedWalkingMinutes = r.same ? 0 : r.minutes;
     result.routeMinutes = r.same ? null : r.minutes;
-    result.requiredMinutes = Math.ceil(exact + (conditions.indoorMinutes || 0));
+    // Explicit indoor estimates keep their supplied precision; do not round again.
+    result.requiredMinutes = result.estimatedWalkingMinutes + (conditions.indoorMinutes || 0);
     result.remainingMinutes = gap - result.requiredMinutes;
     result.status = result.remainingMinutes < 0 ? '어려움'
       : result.remainingMinutes >= conditions.comfortableMarginMinutes ? '여유' : '빠듯';

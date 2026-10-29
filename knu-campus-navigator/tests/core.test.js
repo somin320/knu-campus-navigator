@@ -53,14 +53,25 @@ test('transfer states, exact boundaries and configurable 3/5 minute margins', ()
   assert.equal(C.TRANSFER_DEFAULTS.comfortableMarginMinutes, 5);
 });
 
-test('transfer ceilings unrounded time; legacy route display still rounds', () => {
+test('transfer uses route rounding and minimum for display, remaining time and judgement', () => {
+  for (const exact of [0, 0.1, 2.1, 2.5, 2.9]) {
+    const G = lineGraph(67 * exact);
+    const route = C.route(G, ep(G, '100'), ep(G, '101'), false);
+    const r = C.assessTransfer(G, 100, 101, route.minutes);
+    assert.equal(route.minutes, Math.max(1, Math.round(exact)));
+    assert.equal(r.estimatedWalkingMinutes, route.minutes); assert.equal(r.routeMinutes, route.minutes);
+    assert.equal(r.requiredMinutes, route.minutes); assert.equal(r.remainingMinutes, 0);
+    assert.equal(r.status, '빠듯'); assert.equal(r.canMakeIt, true);
+    assert.equal(r.conditions.rounding, 'route-minutes');
+    assert.ok(Math.abs(r.exactWalkingMinutes - exact) < 1e-9);
+    const comfortable = C.assessTransfer(G, 100, 101, route.minutes + 5);
+    assert.equal(comfortable.status, '여유'); assert.equal(comfortable.remainingMinutes, 5);
+    assert.match(r.message, new RegExp(`필요시간 ${route.minutes}분, 남는 시간 0분`));
+  }
   const G = lineGraph(67 * 2.1);
-  assert.equal(C.route(G, ep(G, '100'), ep(G, '101'), false).minutes, 2);
-  const r = C.assessTransfer(G, 100, 101, 2);
-  assert.equal(r.estimatedWalkingMinutes, 3); assert.equal(r.routeMinutes, 2);
-  assert.equal(r.status, '어려움'); assert.equal(r.remainingMinutes, -1);
   const inside = C.assessTransfer(G, '100', '101', 10, { indoorMinutes: 0.5 });
-  assert.equal(inside.requiredMinutes, 3); assert.equal(inside.conditions.indoorTimeKnown, true);
+  assert.equal(inside.estimatedWalkingMinutes, 2); assert.equal(inside.requiredMinutes, 2.5);
+  assert.equal(inside.remainingMinutes, 7.5); assert.equal(inside.conditions.indoorTimeKnown, true);
 });
 
 test('same-building unknown indoor time defers judgement, explicit indoor estimate enables it', () => {
@@ -70,6 +81,8 @@ test('same-building unknown indoor time defers judgement, explicit indoor estima
   const known = C.assessTransfer(G, '100', '100', 7, { indoorMinutes: 2 });
   assert.equal(known.status, '여유'); assert.equal(known.requiredMinutes, 2);
   assert.equal(C.assessTransfer(G, '100', '100', 0, { indoorMinutes: 0 }).status, '빠듯');
+  const fractional = C.assessTransfer(G, '100', '100', 1, { indoorMinutes: 0.5 });
+  assert.equal(fractional.requiredMinutes, 0.5); assert.equal(fractional.remainingMinutes, 0.5);
 });
 
 test('invalid break/options/building and unknown route return structured, undecided results', () => {
