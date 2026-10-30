@@ -2217,7 +2217,16 @@
 {"id":"wp_mvs9zg8ct0y","name":"중간점","x":48,"y":30,"lat":35.891357,"lng":128.60906,"type":"intersection"},
 {"id":"wp_mvs9zg8vfvu","name":"중간점","x":78,"y":24,"lat":35.89223,"lng":128.614463,"type":"intersection"},
 {"id":"wp_mvs9zgeqlwl","name":"중간점","x":55,"y":30,"lat":35.891361,"lng":128.610269,"type":"intersection"},
-{"id":"wp_mvs9zgfg6h3","name":"중간점","x":35,"y":46,"lat":35.888964,"lng":128.606659,"type":"intersection"}
+{"id":"wp_mvs9zgfg6h3","name":"중간점","x":35,"y":46,"lat":35.888964,"lng":128.606659,"type":"intersection"},
+{"id":"wp_mvuvclxo3ds","name":"나래관 (507)","x":46,"y":66,"lat":35.885867,"lng":128.608629,"type":"building","poi":"기숙사"},
+{"id":"wp_mvuvekj6iq1","name":"중간점","x":47,"y":65,"lat":35.885973,"lng":128.608755,"type":"intersection"},
+{"id":"wp_mvuverqdhhk","name":"중간점","x":47,"y":64,"lat":35.886093,"lng":128.608913,"type":"intersection"},
+{"id":"wp_mvuvevouu9z","name":"중간점","x":48,"y":63,"lat":35.886188,"lng":128.60905,"type":"intersection"},
+{"id":"wp_mvuvf8pri3p","name":"중간점","x":45,"y":63,"lat":35.886303,"lng":128.608559,"type":"intersection"},
+{"id":"wp_mvuvfb88wet","name":"중간점","x":45,"y":64,"lat":35.886177,"lng":128.608532,"type":"intersection"},
+{"id":"wp_mvuvfdnrge5","name":"중간점","x":46,"y":64,"lat":35.886177,"lng":128.60861,"type":"intersection"},
+{"id":"wp_mvuvfexvl6v","name":"중간점","x":47,"y":64,"lat":35.886095,"lng":128.608763,"type":"intersection"},
+{"id":"wp_mvuvhpess9p","name":"중간점","x":47,"y":65,"lat":35.88598,"lng":128.60891,"type":"intersection"}
 ],
 "edges":[
 {"from":"100","to":"osm_5608591569","weight":41,"type":"sidewalk"},
@@ -5054,6 +5063,7 @@
 {"from":"wp_92","to":"504","weight":46,"type":"sidewalk"},
 {"from":"wp_92","to":"osm_5102780935","weight":11,"type":"road","auto":true},
 {"from":"wp_92","to":"osm_5608591576","weight":10,"type":"road","auto":true},
+{"from":"wp_92","to":"wp_mvuvhpess9p","weight":6,"type":"sidewalk"},
 {"from":"wp_93","to":"osm_5102780970","weight":50,"type":"road","auto":true},
 {"from":"wp_93","to":"osm_5102781026","weight":46,"type":"road","auto":true},
 {"from":"wp_94","to":"osm_5102780982","weight":24,"type":"road","auto":true},
@@ -5195,5 +5205,14 @@
 {"from":"wp_mvs9zgfg6h3","to":"osm_7966899579","weight":31,"type":"sidewalk","auto":true},
 {"from":"wp_mvs9zgfg6h3","to":"osm_7966899581","weight":51,"type":"sidewalk","auto":true},
 {"from":"wp_mvs9zgfg6h3","to":"wp_174","weight":8,"type":"sidewalk","auto":true},
-{"from":"wp_mvs9zgfg6h3","to":"wp_9","weight":11,"type":"sidewalk","auto":true}
+{"from":"wp_mvs9zgfg6h3","to":"wp_9","weight":11,"type":"sidewalk","auto":true},
+{"from":"wp_mvuvekj6iq1","to":"wp_mvuvclxo3ds","weight":18,"type":"sidewalk"},
+{"from":"wp_mvuvekj6iq1","to":"wp_mvuvfexvl6v","weight":15,"type":"sidewalk"},
+{"from":"wp_mvuvekj6iq1","to":"wp_mvuvhpess9p","weight":12,"type":"sidewalk"},
+{"from":"wp_mvuvevouu9z","to":"wp_mvuverqdhhk","weight":13,"type":"sidewalk"},
+{"from":"wp_mvuvf8pri3p","to":"wp_mvuvfb88wet","weight":13,"type":"sidewalk"},
+{"from":"wp_mvuvfb88wet","to":"wp_mvuvfdnrge5","weight":11,"type":"sidewalk"},
+{"from":"wp_mvuvfdnrge5","to":"wp_mvuvfexvl6v","weight":12,"type":"sidewalk"},
+{"from":"wp_mvuvfexvl6v","to":"wp_mvuverqdhhk","weight":13,"type":"sidewalk"},
+{"from":"wp_mvuvhpess9p","to":"wp_mvuverqdhhk","weight":14,"type":"sidewalk"}
 ]}

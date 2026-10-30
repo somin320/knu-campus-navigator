@@ -112,4 +112,28 @@ test('multiple entrances pick the least-cost endpoint; same building remains gro
   assert.deepEqual(C.route(G, ep(G, '101'), ep(G, '101'), false), { same: true });
 });
 
+test('unnumbered building supports search and routing, but transfer requires a numbered building', () => {
+  // Fictional coordinates and names: this fixture never edits the campus data.
+  const G = C.build({ nodes: [
+    { id: 'test-a', name: '번호없는테스트관', type: 'building', lat: 35, lng: 128 },
+    { id: 'test-x', type: 'intersection', lat: 35.0001, lng: 128 },
+    { id: 'test-b', name: '번호있는테스트관', buildingNumber: '100', type: 'building', lat: 35.0002, lng: 128 },
+    { id: 'test-a2', name: '번호없는테스트관', type: 'building', lat: 35, lng: 128.0001 },
+  ], edges: [
+    { from: 'test-a', to: 'test-x', type: 'sidewalk' },
+    { from: 'test-a2', to: 'test-x', type: 'sidewalk' },
+    { from: 'test-x', to: 'test-b', type: 'sidewalk' },
+  ] });
+  const p = G.byKey.get('l:번호없는테스트관');
+  assert.equal(p.kind, 'landmark'); assert.equal(p.entrances.length, 2);
+  assert.equal(C.search(G, '번호없는테스트관')[0], p.idx);
+  for (const avoid of [false, true]) {
+    for (const [from, to] of [[p.key, '100'], ['100', p.key]]) {
+      const r = C.route(G, ep(G, from), ep(G, to), avoid);
+      assert.ok(r && !r.same); assert.ok(r.minutes >= 1);
+      assert.equal(C.assessTransfer(G, from, to, 10, { avoid }, r).reason, 'unknown-building');
+    }
+  }
+});
+
 module.exports = { lineGraph };

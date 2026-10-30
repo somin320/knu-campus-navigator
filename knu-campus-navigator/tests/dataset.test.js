@@ -84,7 +84,8 @@ test('facility ETA matches route ETA in both modes, while cost and ordering keep
 
 test('normal aliases survive and numeric overmatching is removed', () => {
   for (const [query, key] of [['중도', '111'], ['글플', '103'], ['공12', '408'], ['4합', '304'], ['DGB', '102'],
-    ['dgb', '102'], ['공2a', '402'], ['IT 3', '413'], ['111동', '111'], ['농대2', '203']]) {
+    ['dgb', '102'], ['공2a', '402'], ['IT 3', '413'], ['111동', '111'], ['농대2', '203'],
+    ['정센', '116'], ['미융관', '219'], ['종정', '116'], ['사대', '301']]) {
     assert.equal(G.places[C.search(G, query)[0]]?.key, key, query);
   }
   const keys = q => C.search(G, q).map(i => G.places[i].key);

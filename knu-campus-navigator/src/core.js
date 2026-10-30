@@ -66,10 +66,10 @@
     '100': ['본관'], '101': ['대강당'], '102': ['디지비', 'DGB'], '103': ['글플', '글로벌'],
     '104': ['인문대'], '108': ['미래관'], '109': ['도휴', '도서관 휴게실'],
     '111': ['중도', '도서관', '중앙도서관 신관', '중앙도서관 구관', '신관', '구관'],
-    '113': ['향토생활관'], '116': ['종정'], '117': ['테크노빌딩', '테크노파크'],
+    '113': ['향토생활관'], '116': ['종정', '정센'], '117': ['테크노빌딩', '테크노파크'],
     '118': ['약대'], '120': ['예대'], '126': ['간호대'],
     '201': ['농대', '농대1호관'], '209': ['자연대'], '211': ['수영장', '국체'],
-    '214': ['헬스장', '청룡관'], '215': ['백호관', '학생회관', '1학생회관', '학관'],
+    '214': ['헬스장', '청룡관'], '215': ['백호관', '학생회관', '1학생회관', '학관'], '219': ['미융관'],
     '301': ['사대'], '304': ['4합', '사합', '4합강'], '307': ['생과대'], '308': ['경상대'],
     '310': ['사과대', '사회대'], '311': ['로스쿨', '법전원'],
     '408': ['공12', '공대12'], '412': ['신축동', '미래창작관'], '415': ['융복합공학관'],
@@ -453,7 +453,9 @@
   // Team-review default; not a measured allowance or a change to route().minutes.
   const TRANSFER_DEFAULTS = Object.freeze({ comfortableMarginMinutes: 5 });
 
-  function assessTransfer(G, from, to, breakMinutes, options) {
+  // Optional routeResult must match these endpoints and avoidance mode. The UI
+  // passes its current route (including null) to avoid a second graph search.
+  function assessTransfer(G, from, to, breakMinutes, options, routeResult) {
     options = options == null ? {} : options;
     const conditions = {
       avoid: !!options.avoid,
@@ -501,7 +503,9 @@
     const a = building(from), b = building(to);
     if (!a || !b) return fail('unknown-building', '번호가 있는 출발·도착 건물을 확인해 주세요.');
     conditions.from = a.key; conditions.to = b.key;
-    const r = route(G, { nodes: a.entrances, place: a.idx }, { nodes: b.entrances, place: b.idx }, conditions.avoid);
+    const r = routeResult === undefined
+      ? route(G, { nodes: a.entrances, place: a.idx }, { nodes: b.entrances, place: b.idx }, conditions.avoid)
+      : routeResult;
     if (!r) return fail('no-route', '두 건물 사이의 경로를 찾지 못해 이동 가능 여부를 계산할 수 없습니다.');
     if (r.same && !conditions.indoorTimeKnown)
       return fail('same-building-internal-time-unknown', '같은 건물이지만 강의실 간 내부 이동시간을 알 수 없어 판정을 보류합니다. 내부 이동시간을 입력해 주세요.');
