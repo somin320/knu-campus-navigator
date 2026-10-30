@@ -23,6 +23,7 @@
 
   let G = null, MAP = null, H = { places: [], route: [], ep: [], net: [], me: null, pick: null };
   const S = { start: null, end: null, avoid: false, cat: null, view: 'home', focus: null, pick: null, me: null, net: false, res: null, resAvoid: null, field: null, hl: -1 };
+  const transfer = { open: false, preset: '10', custom: '', margin: C.TRANSFER_DEFAULTS.comfortableMarginMinutes };
 
   /* =========================================================
      Map adapters
@@ -282,8 +283,7 @@
   }
   function computeRoute() {
     S.res = C.route(G, S.start, S.end, false);
-    S.resAvoid = S.res && !S.res.same ? C.route(G, S.start, S.end, true) : null;
-    if (S.res && !S.res.same && S.res.stairsRuns === 0) S.avoid = false;
+    S.resAvoid = S.res && !S.res.same ? C.route(G, S.start, S.end, true) : S.res;
     S.view = 'route'; S.focus = null;
     renderPlaces(); renderAllRouteBits(); renderSheet();
     requestAnimationFrame(fitRoute);
@@ -301,6 +301,7 @@
     syncURL();
   }
   function openPlace(pi, pan) {
+    transfer.open = false; renderChips();
     S.view = 'place'; S.focus = pi; S.pick = null;
     closeSuggest();
     renderPlaces(); renderPick(); renderSheet(true);
@@ -310,11 +311,13 @@
     closeSuggest();
     const sn = C.snap(G, lat, lng);
     if (sn.node < 0 || sn.meters > 120) { toast('캠퍼스 안의 길 근처를 눌러 주세요'); return; }
+    transfer.open = false; renderChips();
     S.pick = { lat, lng, node: sn.node, meters: sn.meters };
     S.view = 'pick'; S.focus = null;
     renderPlaces(); renderPick(); renderSheet(true);
   }
   function setCat(cat) {
+    transfer.open = false;
     S.cat = S.cat === cat ? null : cat;
     S.focus = null;
     renderChips(); renderPlaces();
@@ -431,7 +434,7 @@
      Chips and sheet
      ========================================================= */
   function renderChips() {
-    $('#chips').innerHTML = C.CATS.map(c => {
+    $('#chips').innerHTML = `<button class="chip${transfer.open ? ' on' : ''}" style="--cc:var(--green-d)" data-transfer aria-pressed="${transfer.open}">연강 이동 확인</button>` + C.CATS.map(c => {
       const n = G.places.filter(p => c.id in p.cats).length;
       return `<button class="chip${S.cat === c.id ? ' on' : ''}" style="--cc:${c.color}" data-chip="${esc(c.id)}"><span>${c.icon}</span>${esc(c.id)} <small style="opacity:.7">${n}</small></button>`;
     }).join('');
@@ -483,7 +486,7 @@
       if (al.length) metaBits.push('이렇게도 검색돼요: ' + al.join(', '));
     }
     if (S.start && !(S.start.type === 'place' && S.start.place === S.focus)) {
-      const r = C.route(G, S.start, placeEp(S.focus), false);
+      const r = C.route(G, S.start, placeEp(S.focus), S.avoid);
       if (r && !r.same) metaBits.unshift(`${esc(S.start.label)}에서 도보 약 ${r.minutes}분 (${fmtM(r.meters)})`);
     }
     if (metaBits.length) h += `<p class="meta">${metaBits.join('<br>')}</p>`;
@@ -499,17 +502,10 @@
 
   function viewRoute() {
     const a = S.res, b = S.resAvoid;
-    if (!a) return `<div class="h2">경로를 찾지 못했어요</div><div class="err">두 지점을 잇는 길 데이터가 없어요. 편집기에서 이 구간을 연결해 주세요.</div>`;
-    if (a.same) return `<div class="h2">출발지와 도착지가 같아요</div><p class="sub">다른 도착지를 골라 주세요.</p>`;
-    const r = curRoute() || a;
-    let h = '';
-    if (a.stairsRuns > 0 || a.slopeM > 0) {
-      const same = b && Math.abs(b.meters - a.meters) < 1 && b.stairsRuns === a.stairsRuns;
-      h += `<div class="tabs">
-        <button class="tab${!S.avoid ? ' on' : ''}" data-act="mode-0">추천 경로<small>${a.minutes}분 · 계단 ${a.stairsRuns}곳</small></button>
-        <button class="tab${S.avoid ? ' on' : ''}" data-act="mode-1">계단 회피<small>${b ? (same ? '같은 경로' : b.minutes + '분 · ' + fmtM(b.meters)) : '경로 없음'}</small></button>
-      </div>`;
-    }
+    let h = routeModes();
+    if (!a || !curRoute()) return h + `<div class="h2">경로를 찾지 못했어요</div><div class="err">두 지점을 잇는 길 데이터가 없어요. 편집기에서 이 구간을 연결해 주세요.</div>`;
+    if (a.same) return h + `<div class="h2">출발지와 도착지가 같아요</div><p class="sub">다른 도착지를 골라 주세요.</p>`;
+    const r = curRoute();
     h += `<div class="sum"><span class="min">${r.minutes}<small>분</small></span><span class="dist">${fmtM(r.meters)}</span><span class="eta">${eta(r.minutes)}</span></div>`;
     h += `<p class="route-names"><b>${esc(S.start.label)}</b> 에서 <b>${esc(S.end.label)}</b> 까지 도보</p>`;
     const tot = r.meters || 1;
@@ -532,6 +528,63 @@
     }).join('') + '</ol>';
     h += `<div class="btnrow"><button class="btn ghost" data-act="swap">출발 도착 바꾸기</button><button class="btn ghost" data-act="share">링크 복사</button></div>`;
     return h;
+  }
+
+  function routeModes() {
+    const a = S.res, b = S.resAvoid;
+    const same = a && b && (a.same && b.same || a.nodes && b.nodes && a.nodes.length === b.nodes.length && a.nodes.every((n, i) => n === b.nodes[i]));
+    const detail = r => !r ? '경로 없음' : r.same ? '같은 건물' : `${r.minutes}분 · ${fmtM(r.meters)}`;
+    return `<div class="tabs" aria-label="경로 선택">
+      <button class="tab${!S.avoid ? ' on' : ''}" data-act="mode-0" aria-pressed="${!S.avoid}">추천 경로<small>${detail(a)}</small></button>
+      <button class="tab${S.avoid ? ' on' : ''}" data-act="mode-1" aria-pressed="${S.avoid}">계단 회피<small>${same ? '같은 경로' : detail(b)}</small></button>
+    </div><p class="meta">계단 회피는 계단과 경사를 덜 지나는 경로를 우선해요. 완전히 피하는 것을 보장하지는 않아요.</p>`;
+  }
+
+  function transferAssessment() {
+    const gap = transfer.preset === 'custom' ? (transfer.custom.trim() === '' ? NaN : Number(transfer.custom)) : Number(transfer.preset);
+    return C.assessTransfer(G, S.start, S.end, gap, {
+      avoid: S.avoid, comfortableMarginMinutes: transfer.margin,
+    }, curRoute());
+  }
+  function transferResult() {
+    const r = transferAssessment();
+    if (!r.ok) {
+      const message = r.reason === 'same-building-internal-time-unknown'
+        ? '같은 건물의 강의실·층간 이동시간은 알 수 없어 판정을 보류해요.' : r.message;
+      return `<div class="err"><b>판정 불가</b><br>${esc(message)}</div>`;
+    }
+    const tone = r.status === '여유' ? 'comfortable' : r.status === '빠듯' ? 'tight' : 'difficult';
+    const mins = n => Number(n.toFixed(2));
+    return `<div class="transfer-result ${tone}"><strong>${r.status}</strong>
+      <dl><div><dt>예상 도보시간</dt><dd>${r.estimatedWalkingMinutes}분</dd></div>
+      <div><dt>남은 시간</dt><dd>${mins(r.remainingMinutes)}분${r.remainingMinutes < 0 ? ` (${mins(-r.remainingMinutes)}분 부족)` : ''}</dd></div></dl></div>`;
+  }
+  function viewTransfer() {
+    const summary = ep => ep ? esc(ep.label) : '미선택';
+    return `<div class="h2">연강 이동 확인</div><p class="sub">위 검색창에서 출발 건물과 도착 건물을 선택하세요.</p>
+      <p class="route-names"><b>${summary(S.start)}</b> → <b>${summary(S.end)}</b></p>
+      <div class="transfer-controls"><label for="transferBreak">쉬는 시간</label>
+      <select id="transferBreak">${[['10', '10분'], ['15', '15분'], ['20', '20분'], ['custom', '직접 입력']].map(([v, label]) => `<option value="${v}"${transfer.preset === v ? ' selected' : ''}>${label}</option>`).join('')}</select>
+      <div id="transferCustomWrap"${transfer.preset === 'custom' ? '' : ' hidden'}><label for="transferCustom">쉬는 시간 (분)</label>
+      <input id="transferCustom" type="number" min="0" step="any" inputmode="decimal" placeholder="예: 12" value="${esc(transfer.custom)}"></div></div>
+      ${routeModes()}<div id="transferResult" role="status" aria-live="polite">${transferResult()}</div>
+      <p class="meta">건물 간 예상 도보시간 기준이며, 건물 내부 이동시간은 포함되지 않습니다.</p>
+      <div class="btnrow"><button class="btn ghost" data-act="swap">출발 도착 바꾸기</button><button class="btn ghost" data-act="transfer-close">일반 길찾기</button></div>`;
+  }
+  function onTransferInput(ev) {
+    if (ev.target.id === 'transferBreak') {
+      transfer.preset = ev.target.value;
+      $('#transferCustomWrap').hidden = transfer.preset !== 'custom';
+    } else if (ev.target.id === 'transferCustom') transfer.custom = ev.target.value;
+    else return;
+    $('#transferResult').innerHTML = transferResult();
+    updateSheetVar();
+  }
+  function toggleTransfer() {
+    transfer.open = !transfer.open;
+    S.cat = null; S.view = S.start && S.end ? 'route' : 'home';
+    S.focus = null; S.pick = null;
+    closeSuggest(); renderChips(); renderPlaces(); renderPick(); renderSheet(true);
   }
 
   function viewCat() {
@@ -558,9 +611,9 @@
   function renderSheet(expand) {
     const body = $('#sheetBody');
     const v = S.view;
-    body.innerHTML = v === 'place' ? viewPlace() : v === 'pick' ? viewPick() : v === 'route' ? viewRoute() : v === 'cat' ? viewCat() : viewHome();
+    body.innerHTML = transfer.open ? viewTransfer() : v === 'place' ? viewPlace() : v === 'pick' ? viewPick() : v === 'route' ? viewRoute() : v === 'cat' ? viewCat() : viewHome();
     body.scrollTop = 0;
-    const idle = v === 'home' && !S.start && !S.end;
+    const idle = !transfer.open && v === 'home' && !S.start && !S.end;
     if (isMobile() && idle) $('#sheet').classList.add('min');
     else if (expand || !idle) $('#sheet').classList.remove('min');
     updateSheetVar();
@@ -586,6 +639,7 @@
     } else if (a === 'me-start') locateMe();
     else if (a === 'mode-0' || a === 'mode-1') { S.avoid = a === 'mode-1'; renderAllRouteBits(); renderSheet(); fitRoute(); }
     else if (a === 'swap') swap();
+    else if (a === 'transfer-close') toggleTransfer();
     else if (a === 'share') {
       const url = location.href;
       (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('경로 링크를 복사했어요'), () => toast(url));
@@ -662,8 +716,12 @@
     $('#btnNet').innerHTML = SVG.net;
     renderChips();
     wireSearch();
-    $('#chips').addEventListener('click', ev => { const b = ev.target.closest('[data-chip]'); if (b) setCat(b.dataset.chip); });
+    $('#chips').addEventListener('click', ev => {
+      if (ev.target.closest('[data-transfer]')) { toggleTransfer(); return; }
+      const b = ev.target.closest('[data-chip]'); if (b) setCat(b.dataset.chip);
+    });
     $('#sheetBody').addEventListener('click', onSheetClick);
+    $('#sheetBody').addEventListener('input', onTransferInput);
     $('#sheet .handle').addEventListener('click', () => { $('#sheet').classList.toggle('min'); setTimeout(updateSheetVar, 260); });
     $('#btnLoc').addEventListener('click', locateMe);
     $('#btnNet').addEventListener('click', () => { S.net = !S.net; renderNet(); if (S.net) toast('파란 선은 우리가 직접 그린 캠퍼스 길이에요'); });
