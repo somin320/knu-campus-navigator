@@ -96,6 +96,33 @@ test('normal aliases survive and numeric overmatching is removed', () => {
   for (const p of ps) assert.ok(C.search(G, `${p.name} (${p.num})`).includes(p.idx), `${p.key}: name with building number`);
 });
 
+test('humanities hall aliases resolve to 106 without colliding with humanities college 104', () => {
+  const keys = query => C.search(G, query).map(i => G.places[i].key);
+  for (const query of ['인문관', '인진관', '인문한국진흥관'])
+    assert.deepEqual(keys(query), ['106'], query);
+  for (const query of ['인문대', '인문대학'])
+    assert.deepEqual(keys(query), ['104'], query);
+  for (const key of ['104', '106'])
+    assert.equal(keys(key)[0], key);
+});
+
+test('biology and cafeteria aliases uniquely find existing buildings without renaming them', () => {
+  const keys = query => C.search(G, query).map(i => G.places[i].key);
+  for (const [alias, key, name] of [['생물관', '217', '생물학관'], ['카페테리아 첨성', '305', '복지관']]) {
+    const p = G.byKey.get(key), normalized = alias.replace(/\s/g, '');
+    assert.equal(p.name, name);
+    assert.equal(p.aliases.filter(a => a.replace(/\s/g, '') === normalized).length, 1);
+    assert.deepEqual(G.places.filter(p => p.search.includes(normalized)).map(p => p.key), [key]);
+    assert.deepEqual(keys(alias), [key], alias);
+    assert.equal(keys(name)[0], key, name);
+  }
+  assert.deepEqual(keys('카페테리아첨성'), ['305']);
+  assert.deepEqual(keys('카페테리아   첨성'), ['305']);
+  for (const [query, key] of [['첨성관', '114'], ['첨성인미래관', '108'], ['생과대', '307'], ['학관', '215']])
+    assert.equal(keys(query)[0], key, query);
+  assert.equal(C.catOfQuery('카페테리아 첨성'), null, 'cafeteria alias must remain a building search');
+});
+
 test('actual transfers use the same ETA as route and facility displays in both modes', () => {
   for (const [from, to] of [['100', '416'], ['413', '414'], ['111', '103']]) {
     const a = G.byKey.get(from), b = G.byKey.get(to);
