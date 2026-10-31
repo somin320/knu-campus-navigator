@@ -723,6 +723,16 @@
     $('#sheetBody').addEventListener('click', onSheetClick);
     $('#sheetBody').addEventListener('input', onTransferInput);
     $('#sheet .handle').addEventListener('click', () => { $('#sheet').classList.toggle('min'); setTimeout(updateSheetVar, 260); });
+    // swipe the sheet down to fold it and see the map, swipe up to open it again
+    (function () {
+      const sheet = $('#sheet'), body = $('#sheetBody'); let y0 = null, atTop = false;
+      sheet.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; atTop = body.scrollTop <= 0 || !!e.target.closest('.handle'); }, { passive: true });
+      sheet.addEventListener('touchend', e => {
+        if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null;
+        if (dy > 50 && atTop && !sheet.classList.contains('min')) { sheet.classList.add('min'); setTimeout(updateSheetVar, 260); }
+        else if (dy < -50 && sheet.classList.contains('min')) { sheet.classList.remove('min'); setTimeout(updateSheetVar, 260); }
+      }, { passive: true });
+    })();
     $('#btnLoc').addEventListener('click', locateMe);
     $('#btnNet').addEventListener('click', () => { S.net = !S.net; renderNet(); if (S.net) toast('파란 선은 우리가 직접 그린 캠퍼스 길이에요'); });
     if (window.ResizeObserver) new ResizeObserver(updateSheetVar).observe($('#sheet'));
