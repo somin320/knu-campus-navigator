@@ -92,7 +92,7 @@ input{font:inherit;color:inherit}
 .sg .t small{color:var(--ink3);font-size:12px}
 .sg mark{background:none;color:var(--green-d);font-weight:800}
 .sg-h{font-size:11.5px;color:var(--ink3);padding:8px 10px 4px;font-weight:600}
-#chips{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 4px;scrollbar-width:none}
+#chips{display:flex;flex-wrap:wrap;gap:6px;overflow-x:auto;padding:10px 16px 4px;scrollbar-width:none}
 #chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;color:var(--ink2)}
 .chip.on{background:var(--cc);border-color:var(--cc);color:#fff}
@@ -194,7 +194,7 @@ input{font:inherit;color:inherit}
   #top{position:absolute;left:0;right:0;top:0;pointer-events:none;padding-top:env(safe-area-inset-top)}
   #searchCard{pointer-events:auto;margin:10px 10px 0;box-shadow:var(--shadow);border:0}
   .field{height:44px}
-  #chips{pointer-events:auto;padding:8px 10px 4px}
+  #chips{pointer-events:auto;padding:8px 10px 4px;flex-wrap:nowrap}
   .chip{box-shadow:0 2px 6px rgba(20,30,50,.12);border-color:transparent}
   #sheet{pointer-events:auto;position:absolute;left:0;right:0;bottom:0;max-height:58vh;background:#fff;border-radius:20px 20px 0 0;
     box-shadow:0 -6px 24px rgba(20,30,50,.16);transition:max-height .25s ease}
