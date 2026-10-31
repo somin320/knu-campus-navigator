@@ -1,5 +1,7 @@
 # KNU Campus Navigator
 
+배포 주소: https://knu-campus-navigator.netlify.app
+
 경북대학교 대구캠퍼스 도보 길찾기 웹앱입니다. 네이버 지도 위에 팀이 직접 만든 보행 네트워크를 올리고 다익스트라 알고리즘으로 최단 경로를 계산합니다.
 
 ## 실행
